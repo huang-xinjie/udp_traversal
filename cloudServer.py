@@ -7,23 +7,26 @@ HOST, PORT = '0.0.0.0', 23333
 BUFFSIZE = 1024
 onlinePeerUser = list()
 
-clientAddr = None
-serverAddr = None
+class PeerUser():
+    #{'accountName':{'passwd':passwd,
+    #                'serverThread': sthread,
+    #                'clientThread': cthread}
+    peerUserList = dict()      #map different account
+    
+    def addUser(self, t):
+        if self.authUser(t.account, t.passwd):
+            pass
+    
+    def authUser(self, account, passwd):
+        if PeerUser.peerUserList[account]:  # user exists, check passwd
+            return PeerUser.peerUserList[account][passwd] == passwd
+        else:   # no user exists, add a new user
+            return True
 
-"""
-class PeerUser:
-    account = str()
-    serverData = None
-    clientData = None
+class PeerUserThread(threading.Thread):
+    """对等的内网主机使用这个"""
     serverAddr = None
     clientAddr = None
-
-    def __init__(self, addr, data):
-        serverAddr = addr
-"""
-
-class PeerThread(threading.Thread):
-    """对等的内网主机使用这个"""
     addr = ('',)
     data = None    #data from peerServer or peerClient
     s4s = None     #socket for peerServer
@@ -46,17 +49,17 @@ class PeerThread(threading.Thread):
 
     def peerServer(self, s4s):
         s4s.sendto("Hello, peerServer, welcome".encode(), self.addr)
-        PeerThread.serverAddr = self.addr
+        PeerUserThread.serverAddr = json.dumps({'serverAddr': self.addr})
         time.sleep(5)     #确保client已在线
-        if PeerThread.clientAddr != None:
-            s4s.sendto(str(PeerThread.clientAddr).encode(), self.addr)
+        if PeerUserThread.clientAddr != None:
+            s4s.sendto(PeerUserThread.clientAddr.encode(), self.addr)
 
     def peerClient(self, s4c):
         s4c.sendto("Hello, peerClient, welcome".encode(), self.addr)
-        PeerThread.clientAddr = self.addr
+        PeerUserThread.clientAddr = json.dumps({'clientAddr': self.addr})
         time.sleep(5)      #确保server已在线
-        if PeerThread.serverAddr != None:
-            s4c.sendto(str(PeerThread.serverAddr).encode(), self.addr)
+        if PeerUserThread.serverAddr != None:
+            s4c.sendto(PeerUserThread.serverAddr.encode(), self.addr)
 
 
 def checkAccount(data):
@@ -82,7 +85,7 @@ def cloudServer():
 
     while True:
         data, addr = s.recvfrom(BUFFSIZE)
-        thread1 = PeerThread(addr, data, s)
+        thread1 = PeerUserThread(addr, data, s)
         thread1.start()
         thread.append(thread1)
 
