@@ -5,27 +5,40 @@ import socket
 HOST, PORT = '127.0.0.1', 23333
 bufSize = 1024
 
-def peerServer():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+class peerServer():
+    def __init__(self, peerData):
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.run()
+    
+    def contactCloudServer(self):
+        # send to cloud server
+        self.s.sendto(json.dumps(peerData).encode(), (HOST, PORT))
+        msg, _ = self.s.recvfrom(bufSize)
+        print(msg.decode())
+        if msg.decode() != "Hello, peerClient, welcome":
+            raise AssertionError(msg.decode())
+    
+    def getServerData(self):
+        # get server data from cloud
+        serverData, _ = self.s.recvfrom(bufSize)
+        self.serverAddr = tuple(json.loads(serverData.decode())['serverAddr'])
+        print(self.serverAddr)
+    
+    def contactServer(self, msg):
+        # waiting for server's msg
+        time.sleep(2)
+        self.s.sendto(msg.encode(), self.serverAddr)
+        msg, _ = self.s.recvfrom(bufSize)
+        print(msg.decode())
 
-    peerData = {'account': "xjhuang@s-an.org",
+    def run(self):
+        self.contactCloudServer()
+        self.getServerData()
+        self.contactServer('Hi, server')
+
+if __name__ == '__main__':
+    peerData = {'account': "ixjhuang@outlook.com",
                 'passwd': "raspiot",
                 'type': "peerClient",
                 'nattype':'full cone'}
-
-    s.sendto(json.dumps(peerData).encode(), (HOST, PORT))
-    msg, _ = s.recvfrom(bufSize)
-    print(msg.decode())
-    serverData, _ = s.recvfrom(bufSize)
-    print(serverData)
-
-    serverAddr = tuple(json.loads(serverData.decode())['serverAddr'])
-    print(serverAddr)
-
-    time.sleep(2)
-    s.sendto('Hi, server'.encode(), serverAddr)
-    msg, _ = s.recvfrom(bufSize)
-    print(msg.decode())
-
-if __name__ == '__main__':
-    peerServer()
+    peerServer(peerData)

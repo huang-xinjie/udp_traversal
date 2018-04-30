@@ -5,23 +5,7 @@ import threading
 
 HOST, PORT = '0.0.0.0', 23333
 BUFFSIZE = 1024
-onlinePeerUser = list()
 
-class PeerUser():
-    #{'accountName':{'passwd':passwd,
-    #                'serverThread': sthread,
-    #                'clientThread': cthread}
-    peerUserList = dict()      #map different account
-    
-    def addUser(self, t):
-        if self.authUser(t.account, t.passwd):
-            pass
-    
-    def authUser(self, account, passwd):
-        if PeerUser.peerUserList[account]:  # user exists, check passwd
-            return PeerUser.peerUserList[account][passwd] == passwd
-        else:   # no user exists, add a new user
-            return True
 
 class PeerUserThread(threading.Thread):
     """对等的内网主机使用这个"""
@@ -35,7 +19,7 @@ class PeerUserThread(threading.Thread):
     def __init__(self, addr, data, s):
         super().__init__()#父类的构造方法
         self.addr = addr
-        self.data = json.loads(data.decode())
+        self.data = data
         self.s4s = s
         self.s4c = s
 
@@ -60,34 +44,51 @@ class PeerUserThread(threading.Thread):
         time.sleep(5)      #确保server已在线
         if PeerUserThread.serverAddr != None:
             s4c.sendto(PeerUserThread.serverAddr.encode(), self.addr)
+  
 
+class cloudServer():
+    #{'accountName':{'passwd':passwd,
+    #                'serverThread': sthread,
+    #                'clientThread': cthread}
+    onlinePeerUserDict = dict()      #map different account
+    s = None
+    
+    def __init__(self):
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.s.bind((HOST, PORT))
 
-def checkAccount(data):
-    try:
-        userData = json.loads(data.decode())
-        account = userData['account']
-        passwd = userData['passwd']
-        if account == 'xjhuang':
-            pass
-            if passwd == 'raspIot':
-                onlinePeerUser.append(account)
-        else:
-            print('Account or password wrong')
-    except Exception:
-        print("Error")
+        self.onlinePeerUserDict = dict()
+        self.run()  #keep running
 
-def cloudServer():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind((HOST, PORT))
+    def authUser(self, account, passwd, userType):
+        if self.onlinePeerUserDict.get(account):  # user exists, check passwd
+            return self.onlinePeerUserDict[account]['passwd'] == passwd
+        # user not exists, add a new user
+        return False if userType == 'peerClient' else True
 
-    thread = list()
+    
+    def addUser(self, data, thread):
+        userType, account, passwd = data['type'], data['account'], data['passwd']
+        if userType == 'peerClient':
+            self.onlinePeerUserDict[account]['clientThread'] = thread
+        elif userType == 'peerServer':
+            userDict = {'passwd':passwd,
+                        'serverThread': thread,
+                        'clientThread': None}
+            self.onlinePeerUserDict[account] = userDict
 
-    while True:
-        data, addr = s.recvfrom(BUFFSIZE)
-        thread1 = PeerUserThread(addr, data, s)
-        thread1.start()
-        thread.append(thread1)
+    def run(self):
+        while True:
+            datab, addr = self.s.recvfrom(BUFFSIZE)
+            data = json.loads(datab.decode())
+            if self.authUser(data['account'], data['passwd'], data['type']):
+                userThread = PeerUserThread(addr, data, self.s)
+                userThread.start()
+                self.addUser(data, userThread)
+            else:
+                self.s.sendto("Hello, peerUser. Passwd not match or peerServer off line!".encode(), addr)
+                print('Passwd not match or peerServer offline!')
 
 if __name__ == '__main__':
     cloudServer()
