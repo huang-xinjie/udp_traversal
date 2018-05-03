@@ -21,8 +21,10 @@ class peerServer():
     def getServerData(self):
         # get server data from cloud
         serverData, _ = self.s.recvfrom(bufSize)
-        self.serverAddr = tuple(json.loads(serverData.decode())['serverAddr'])
-        print(self.serverAddr)
+        if _ == (HOST, PORT):
+            self.serverAddr = tuple(json.loads(serverData.decode())['serverAddr'])
+            return self.serverAddr
+        return False
     
     def contactServer(self, msg):
         # waiting for server's msg
@@ -33,8 +35,8 @@ class peerServer():
 
     def run(self):
         self.contactCloudServer()
-        self.getServerData()
-        self.contactServer('Hi, server')
+        if self.getServerData():
+            self.contactServer('Hi, server')
 
 if __name__ == '__main__':
     peerData = {'account': "ixjhuang@outlook.com",

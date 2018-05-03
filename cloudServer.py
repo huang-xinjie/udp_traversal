@@ -12,12 +12,12 @@ class PeerUserThread(threading.Thread):
     serverAddr = None
     clientAddr = None
     addr = ('',)
-    data = None    #data from peerServer or peerClient
-    s4s = None     #socket for peerServer
-    s4c = None     #socket for peerClient
+    data = None    # data from peerServer or peerClient
+    s4s = None     # socket for peerServer
+    s4c = None     # socket for peerClient
 
     def __init__(self, addr, data, s):
-        super().__init__()#父类的构造方法
+        super().__init__() # 父类的构造方法
         self.addr = addr
         self.data = data
         self.s4s = s
