@@ -4,6 +4,7 @@ import socket
 import threading
 
 HOST, PORT = '0.0.0.0', 23333
+dPort1, dPort2 = 15002, 12553
 BUFFSIZE = 1024
 
 
@@ -90,5 +91,28 @@ class cloudServer():
                 self.s.sendto("Hello, peerUser. Passwd not match or peerServer off line!".encode(), addr)
                 print('Passwd not match or peerServer offline!')
 
+class detectNatType():    
+    def __init__(self):
+        self.ds1 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.ds2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.ds1.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.ds2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.ds1.bind((HOST, dPort1))
+        self.ds2.bind((HOST, dPort2))
+        threading.Thread(target=self.port1Run).start()
+        threading.Thread(target=self.port2Run).start()
+    
+
+    def port1Run(self):
+        while True:
+            _, addr = self.ds1.recvfrom(BUFFSIZE)
+            self.ds1.sendto(str(addr).encode(), addr)
+
+    def port2Run(self):
+        while True:
+            _, addr = self.ds2.recvfrom(BUFFSIZE)
+            self.ds2.sendto(str(addr).encode(), addr)
+
 if __name__ == '__main__':
+    detectNatType()
     cloudServer()
