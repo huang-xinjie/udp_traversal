@@ -3,54 +3,101 @@ import time
 import socket
 import threading
 
-HOST, PORT = '0.0.0.0', 23333
-dPort1, dPort2 = 15002, 12553
+FCNat, ARCNat, PRCNat, SymNat = 'FC Nat', 'ARC Nat', 'PRC Nat', 'Sym Nat'
+HOST, PORT, s1p1, s1p2 = '0.0.0.0', 23333, 15002, 12553
+HOST2, s2p1 = '139.199.194.49', 16201
 BUFFSIZE = 1024
 
-
-class PeerUserThread(threading.Thread):
+class cloudServer(threading.Thread):
     """对等的内网主机使用这个"""
-    serverAddr = None
-    clientAddr = None
-    addr = ('',)
-    data = None    # data from peerServer or peerClient
-    s4s = None     # socket for peerServer
-    s4c = None     # socket for peerClient
+    account = str()
+    peerAddr1 = tuple()
+    peerAddr2 = tuple()
+    peerType1 = ''
+    peerType2 = ''
+    s = None
 
-    def __init__(self, addr, data, s):
+    def __init__(self, account, addr, type, s):
         super().__init__() # 父类的构造方法
-        self.addr = addr
-        self.data = data
-        self.s4s = s
-        self.s4c = s
+        print('From %s peerUser1, addr is %s' % (account, str(addr)))
+        self.account = account
+        self.peerAddr2 = addr
+        self.peerType2 = type
+        self.s = s
+        threading.Thread(target=self.keepAlive).start()
 
-    def run(self):
-        if self.data['type'] == 'peerServer': 
-            print("From peerServer, addr is %s" % str(self.addr))
-            self.peerServer(self.s4s)
-        elif self.data['type'] == 'peerClient':
-            print("From peerClient, addr is %s" % str(self.addr))
-            self.peerClient(self.s4c)
+    def addPeer(self, addr, type):
+        print('From %s peerUser2, addr is %s' % (self.account, str(addr)))
+        isNewPeer = False if self.peerAddr1 else True
+        self.peerAddr1 = self.peerAddr2
+        self.peerType1 = self.peerType2
+        self.peerAddr2 = addr
+        self.peerType2 = type
+        if isNewPeer:
+            threading.Thread(target=self.travel).start()
 
-    def peerServer(self, s4s):
-        s4s.sendto("Hello, peerServer, welcome".encode(), self.addr)
-        PeerUserThread.serverAddr = json.dumps({'serverAddr': self.addr})
-        time.sleep(5)     #确保client已在线
-        if PeerUserThread.clientAddr != None:
-            s4s.sendto(PeerUserThread.clientAddr.encode(), self.addr)
+    def keepAlive(self):    # until peerUser2 online
+        while not self.peerAddr1:
+            msgb = '00'.encode()
+            self.s.sendto(msgb, self.peerAddr2)
+            time.sleep(30)
 
-    def peerClient(self, s4c):
-        s4c.sendto("Hello, peerClient, welcome".encode(), self.addr)
-        PeerUserThread.clientAddr = json.dumps({'clientAddr': self.addr})
-        time.sleep(5)      #确保server已在线
-        if PeerUserThread.serverAddr != None:
-            s4c.sendto(PeerUserThread.serverAddr.encode(), self.addr)
+    def travel(self):
+        def buildMsg(plan, addr):
+            return (plan + '##' + str(addr)).encode()
+        # 其中一个为全锥型
+        if self.peerType1 == FCNat:
+            # 第一个数 为 方案数，第二个数 为 第几主机
+            # msg1 send to low level user
+            # msg2 send to high level user
+            msg1 = buildMsg("11", self.peerAddr2)
+            self.s.sendto(msg1, self.peerAddr1)
+            msg1 = buildMsg("12", self.peerAddr1)
+            self.s.sendto(msg1, self.peerAddr2)
+        elif self.peerType2 == FCNat:
+            msg1 = buildMsg("11", self.peerAddr1)
+            self.s.sendto(msg1, self.peerAddr2)
+            msg2 = buildMsg("12", self.peerAddr2)
+            self.s.sendto(msg2, self.peerAddr1)
+        # 至少在地址限制型及以上
+        elif self.peerType1 == ARCNat:
+            msg1 = buildMsg("51", self.peerAddr2)
+            self.s.sendto(msg1, self.peerAddr1)
+            msg2 = buildMsg("52", self.peerAddr1)
+            self.s.sendto(msg1, self.peerAddr2)
+        elif self.peerType2 == ARCNat:
+            msg1 = buildMsg("51", self.peerAddr1)
+            self.s.sendto(msg1, self.peerAddr2)
+            msg2 = buildMsg("52", self.peerAddr2)
+            self.s.sendto(msg1, self.peerAddr1)
+        # 至少在端口限制型及以上
+        elif self.peerType1 == PRCNat:
+            msg1 = buildMsg("81", self.peerAddr2)
+            self.s.sendto(msg1, self.peerAddr1)
+            msg2 = buildMsg("82", self.peerAddr1)
+            self.s.sendto(msg1, self.peerAddr2)
+        elif self.peerType2 == PRCNat:
+            msg1 = buildMsg("81", self.peerAddr1)
+            self.s.sendto(msg1, self.peerAddr2)
+            msg2 = buildMsg("82", self.peerAddr2)
+            self.s.sendto(msg1, self.peerAddr1)
+        # 均为对称型
+        elif self.peerType1 == SymNat and self.peerType2 == SymNat:
+            msg1 = buildMsg("rst", self.peerAddr2)
+            self.s.sendto(msg1, self.peerAddr1)
+            # peerAddr1 will replace with peerAddr2 here
+            time.sleep(2)
+            msg1 = buildMsg("X1", self.peerAddr1)
+            self.s.sendto(msg1, self.peerAddr2)
+            msg2 = buildMsg("X2", self.peerAddr2)
+            self.s.sendto(msg2, self.peerAddr1)
+            # reset the thread
+            self.peerAddr1 = tuple()
   
 
-class cloudServer():
+class listenHandler():
     #{'accountName':{'passwd':passwd,
-    #                'serverThread': sthread,
-    #                'clientThread': cthread}
+    #                'cloudThread': cloudThread}
     onlinePeerUserDict = dict()      #map different account
     s = None
     
@@ -62,57 +109,63 @@ class cloudServer():
         self.onlinePeerUserDict = dict()
         self.run()  #keep running
 
-    def authUser(self, account, passwd, userType):
+    def authUser(self, account, passwd):
         if self.onlinePeerUserDict.get(account):  # user exists, check passwd
             return self.onlinePeerUserDict[account]['passwd'] == passwd
         # user not exists, add a new user
-        return False if userType == 'peerClient' else True
-
+        return True
     
-    def addUser(self, data, thread):
-        userType, account, passwd = data['type'], data['account'], data['passwd']
-        if userType == 'peerClient':
-            self.onlinePeerUserDict[account]['clientThread'] = thread
-        elif userType == 'peerServer':
+    def addUser(self, data, addr):
+        account, passwd, type = data['account'], data['passwd'], data['nattype']
+        if not self.onlinePeerUserDict.get(account):
+            cloudThread = cloudServer(account, addr, type, self.s)
+            cloudThread.start()
             userDict = {'passwd':passwd,
-                        'serverThread': thread,
-                        'clientThread': None}
+                        'cloudThread': cloudThread}
             self.onlinePeerUserDict[account] = userDict
-
+        else:
+            self.onlinePeerUserDict[account]['cloudThread'].addPeer(addr, type)
+            
     def run(self):
         while True:
-            datab, addr = self.s.recvfrom(BUFFSIZE)
-            data = json.loads(datab.decode())
-            if self.authUser(data['account'], data['passwd'], data['type']):
-                userThread = PeerUserThread(addr, data, self.s)
-                userThread.start()
-                self.addUser(data, userThread)
-            else:
-                self.s.sendto("Hello, peerUser. Passwd not match or peerServer off line!".encode(), addr)
-                print('Passwd not match or peerServer offline!')
+            try:
+                datab, addr = self.s.recvfrom(BUFFSIZE)
+                data = json.loads(datab.decode())
+                if self.authUser(data['account'], data['passwd']):
+                    self.addUser(data, addr)
+                else:
+                    self.s.sendto("Hello, peerUser. Passwd is not match!".encode(), addr)
+                    print('Passwd is not match!')
+            except Exception as e:
+                print("Server Error: ", str(e))
+
 
 class detectNatType():    
     def __init__(self):
+        # detect server bind 2 ports
         self.ds1 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ds2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ds1.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.ds2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.ds1.bind((HOST, dPort1))
-        self.ds2.bind((HOST, dPort2))
-        threading.Thread(target=self.port1Run).start()
-        threading.Thread(target=self.port2Run).start()
-    
+        self.ds1.bind((HOST, s1p1))
+        self.ds2.bind((HOST, s1p2))
 
-    def port1Run(self):
+    def run(self):
         while True:
-            _, addr = self.ds1.recvfrom(BUFFSIZE)
-            self.ds1.sendto(str(addr).encode(), addr)
-
-    def port2Run(self):
-        while True:
-            _, addr = self.ds2.recvfrom(BUFFSIZE)
-            self.ds2.sendto(str(addr).encode(), addr)
+            try:
+                _, addr = self.ds1.recvfrom(BUFFSIZE)
+                data = _.decode()
+                print('Port1: %s from %s' % (data, str(addr)))
+                if data == 'FC detect':
+                    self.ds1.sendto(str(addr).encode(), (HOST2, s2p1))
+                elif data == 'ARC detect':
+                    self.ds2.sendto(str(addr).encode(), addr)
+                else:
+                    # return client's public address
+                    self.ds1.sendto(str(addr).encode(), addr)
+            except Exception as e:
+                print("Detect Error: ", str(e))
 
 if __name__ == '__main__':
-    detectNatType()
-    cloudServer()
+    threading.Thread(target=detectNatType().run).start()
+    listenHandler()
