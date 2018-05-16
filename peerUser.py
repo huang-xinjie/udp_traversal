@@ -22,11 +22,20 @@ class peerUser():
 
     def p2p(self, peerAddr):
         def recvFromPeerUser():
-            msgb, _ = self.s.recvfrom(BUFFSIZE)
-            print('From peerUser: ', msgb.decode())
+            while True:
+                msgb, _ = self.s.recvfrom(BUFFSIZE)
+                print('\r   From peerUser: ', msgb.decode())
+                print('\nSend to peerUser: ', end='')
+                if msgb == 'q'.encode():
+                    print('OK, connection is closed.')
+                    break
         def sendToPeerUser():
-            msg = input('Send to peerUser: ')
-            self.s.sendto(msg.encode(), peerAddr)
+            while True:
+                msg = input('Send to peerUser: ')
+                self.s.sendto(msg.encode(), peerAddr)
+                if msg == 'q':
+                    print('OK, connection is closed.')
+                    break
         threading.Thread(target=recvFromPeerUser).start()
         threading.Thread(target=sendToPeerUser).start()
 
@@ -83,11 +92,12 @@ class peerUser():
                 self.s.sendto('X1'.encode(), (peerIP, peerPort+i))
                 time.sleep(0.1)
             msgb, peerAddr = self.s.recvfrom(BUFFSIZE)
+            print(msgb)
             if msgb.decode() == 'X2':
                 print('Get %s from peer: %s' % (msgb.decode(), str(peerAddr)))
                 self.s.sendto('Hello, peer.'.encode(), peerAddr)
         elif plan == 'X2':
-            time.sleep(1)
+            time.sleep(5)
             peerIP, peerPort = list(peerAddr)
             for i in range(10): # hole punch
                 print('Port: ', peerPort+i)

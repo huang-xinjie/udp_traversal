@@ -91,8 +91,11 @@ class cloudServer(threading.Thread):
             self.s.sendto(msg1, self.peerAddr2)
             msg2 = buildMsg("X2", self.peerAddr2)
             self.s.sendto(msg2, self.peerAddr1)
-            # reset the thread
-            self.peerAddr1 = tuple()
+        
+        
+        # remove this account
+        listenHandler.rmUser(self.account)
+
   
 
 class listenHandler():
@@ -106,25 +109,31 @@ class listenHandler():
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.s.bind((HOST, PORT))
 
-        self.onlinePeerUserDict = dict()
+        listenHandler.onlinePeerUserDict = dict()
         self.run()  #keep running
 
     def authUser(self, account, passwd):
-        if self.onlinePeerUserDict.get(account):  # user exists, check passwd
-            return self.onlinePeerUserDict[account]['passwd'] == passwd
+        if listenHandler.onlinePeerUserDict.get(account):  # user exists, check passwd
+            return listenHandler.onlinePeerUserDict[account]['passwd'] == passwd
         # user not exists, add a new user
         return True
     
     def addUser(self, data, addr):
         account, passwd, type = data['account'], data['passwd'], data['nattype']
-        if not self.onlinePeerUserDict.get(account):
+        if not listenHandler.onlinePeerUserDict.get(account):
             cloudThread = cloudServer(account, addr, type, self.s)
             cloudThread.start()
             userDict = {'passwd':passwd,
                         'cloudThread': cloudThread}
-            self.onlinePeerUserDict[account] = userDict
+            listenHandler.onlinePeerUserDict[account] = userDict
         else:
-            self.onlinePeerUserDict[account]['cloudThread'].addPeer(addr, type)
+            listenHandler.onlinePeerUserDict[account]['cloudThread'].addPeer(addr, type)
+
+    @classmethod
+    def rmUser(cls,account):
+        if cls.onlinePeerUserDict.get(account):
+            del cls.onlinePeerUserDict[account]
+            print('%s offline' % account)
             
     def run(self):
         while True:
