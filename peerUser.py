@@ -90,19 +90,17 @@ class peerUser():
             for i in range(10): # hole punch
                 print('Port: ', peerPort+i)
                 self.s.sendto('X1'.encode(), (peerIP, peerPort+i))
-                time.sleep(0.1)
             msgb, peerAddr = self.s.recvfrom(BUFFSIZE)
             print(msgb)
             if msgb.decode() == 'X2':
                 print('Get %s from peer: %s' % (msgb.decode(), str(peerAddr)))
                 self.s.sendto('Hello, peer.'.encode(), peerAddr)
-        elif plan == 'X2':
-            time.sleep(5)
+        elif plan == 'X2': 
+            time.sleep(1)
             peerIP, peerPort = list(peerAddr)
             for i in range(10): # hole punch
                 print('Port: ', peerPort+i)
                 self.s.sendto('X2'.encode(), (peerIP, peerPort+i))
-                time.sleep(0.1)
             msgb, peerAddr = self.s.recvfrom(BUFFSIZE)
             print(msgb.decode())
         elif plan == 'rst':
